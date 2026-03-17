@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>语音转文字 — Speech to Text</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+--bg:#0a0a0f;--bg2:#12121a;--bg3:#1a1a26;--bg4:#222233;
+--fg:#e8e6f0;--fg2:#a8a4b8;--fg3:#68647a;
+--accent:#7c6cf0;--accent2:#9d8ff8;--accent-dim:rgba(124,108,240,0.12);
+--danger:#f06c6c;--danger-dim:rgba(240,108,108,0.12);
+--success:#6cf0a8;--success-dim:rgba(108,240,168,0.12);
+--recording:#f06c6c;
+--radius:12px;--radius-sm:8px;
+}
+html,body{height:100%;font-family:'Noto Sans SC','Space Mono',sans-serif;background:var(--bg);color:var(--fg);overflow:hidden;font-size:2rem}
+
+/* ===== LOGIN PAGE ===== */
+.login-page{display:flex;align-items:center;justify-content:center;height:100vh;position:relative;overflow:hidden}
+.login-page::before{content:'';position:absolute;width:600px;height:600px;border-radius:50%;background:radial-gradient(circle,rgba(124,108,240,0.08) 0%,transparent 70%);top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none}
+.login-card{text-align:center;z-index:1;padding:3rem;width:380px}
+.login-logo{font-family:'Space Mono',monospace;font-size:13px;letter-spacing:6px;text-transform:uppercase;color:var(--accent2);margin-bottom:2rem;opacity:0.7}
+.login-title{font-size:2.2rem;font-weight:300;letter-spacing:-0.5px;margin-bottom:0.6rem;line-height:1.2}
+.login-title span{color:var(--accent2);font-weight:500}
+.login-sub{color:var(--fg3);font-size:0.85rem;margin-bottom:2.5rem;line-height:1.6}
+.g-btn{display:inline-flex;align-items:center;gap:10px;padding:12px 28px;border-radius:var(--radius);border:1px solid var(--bg4);background:var(--bg2);color:var(--fg);font-size:0.9rem;cursor:pointer;transition:all 0.2s}
+.g-btn:hover{border-color:var(--accent);background:var(--accent-dim)}
+.g-btn svg{width:18px;height:18px}
+.login-hint{margin-top:2rem;font-size:0.75rem;color:var(--fg3)}
+
+/* ===== MAIN APP ===== */
+.app{display:none;height:100vh;grid-template-columns:280px 1fr;grid-template-rows:1fr}
+
+/* Sidebar */
+.sidebar{background:var(--bg2);border-right:1px solid var(--bg3);display:flex;flex-direction:column;overflow:hidden}
+.sidebar-header{padding:1.2rem 1rem;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--bg3)}
+.sidebar-brand{font-family:'Space Mono',monospace;font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--accent2);opacity:0.6}
+.new-chat-btn{width:32px;height:32px;border-radius:var(--radius-sm);border:1px solid var(--bg4);background:transparent;color:var(--fg2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.15s;font-size:18px}
+.new-chat-btn:hover{background:var(--accent-dim);border-color:var(--accent);color:var(--accent2)}
+.chat-list{flex:1;overflow-y:auto;padding:0.5rem}
+.chat-list::-webkit-scrollbar{width:4px}
+.chat-list::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px}
+.chat-item{display:flex;align-items:center;padding:10px 12px;border-radius:var(--radius-sm);cursor:pointer;transition:all 0.15s;gap:8px;margin-bottom:2px;position:relative}
+.chat-item:hover{background:var(--bg3)}
+.chat-item.active{background:var(--accent-dim);color:var(--accent2)}
+.chat-item-text{flex:1;font-size:0.82rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fg2)}
+.chat-item.active .chat-item-text{color:var(--accent2)}
+.chat-item-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0;opacity:0.5}
+.chat-item.active .chat-item-dot{opacity:1}
+.chat-delete{opacity:0;width:24px;height:24px;border-radius:6px;border:none;background:transparent;color:var(--fg3);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.15s;flex-shrink:0;font-size:14px}
+.chat-item:hover .chat-delete{opacity:1}
+.chat-delete:hover{background:var(--danger-dim);color:var(--danger)}
+.sidebar-footer{padding:1rem;border-top:1px solid var(--bg3);display:flex;align-items:center;gap:10px}
+.user-avatar{width:32px;height:32px;border-radius:50%;object-fit:cover;border:2px solid var(--bg4)}
+.user-name{font-size:0.8rem;color:var(--fg2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.logout-btn{font-size:0.72rem;color:var(--fg3);cursor:pointer;background:none;border:none;padding:4px 8px;border-radius:4px;transition:all 0.15s}
+.logout-btn:hover{color:var(--danger);background:var(--danger-dim)}
+.clear-all-btn{width:100%;padding:8px;border:1px solid var(--bg4);border-radius:var(--radius-sm);background:transparent;color:var(--fg3);font-size:0.75rem;cursor:pointer;transition:all 0.15s}
+.clear-all-btn:hover{border-color:var(--danger);color:var(--danger);background:var(--danger-dim)}
+
+/* Chat area */
+.chat-area{display:flex;flex-direction:column;overflow:hidden}
+.chat-header{padding:1rem 1.5rem;border-bottom:1px solid var(--bg3);display:flex;align-items:center;justify-content:space-between;min-height:56px}
+.chat-header-title{font-size:0.9rem;font-weight:500;color:var(--fg)}
+.chat-header-count{font-size:0.75rem;color:var(--fg3)}
+.messages{flex:1;overflow-y:auto;padding:0}
+.messages::-webkit-scrollbar{width:5px}
+.messages::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:3px}
+
+/* Transcription list */
+.transcript-item{display:flex;align-items:center;gap:16px;padding:14px 24px;border-bottom:1px solid var(--bg3);animation:msgIn 0.25s ease;transition:background 0.15s}
+.transcript-item:hover{background:var(--bg2)}
+@keyframes msgIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.transcript-time{font-size:0.78rem;color:var(--fg3);white-space:nowrap;min-width:60px;font-family:'Space Mono',monospace}
+.transcript-text{flex:1;font-size:0.9rem;line-height:1.65;color:var(--fg);white-space:pre-wrap}
+.transcript-copy{width:36px;height:36px;border-radius:6px;border:1px solid var(--bg4);background:transparent;color:var(--fg2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.15s;flex-shrink:0;font-size:18px}
+.transcript-copy:hover{background:var(--accent-dim);border-color:var(--accent);color:var(--accent2)}
+.transcript-delete{opacity:0;width:28px;height:28px;border-radius:6px;border:none;background:transparent;color:var(--fg3);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.15s;flex-shrink:0;font-size:14px}
+.transcript-item:hover .transcript-delete{opacity:1}
+.transcript-delete:hover{background:var(--danger-dim);color:var(--danger)}
+
+.empty-state{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--fg3)}
+.empty-icon{font-size:3rem;margin-bottom:1rem;opacity:0.3}
+.empty-text{font-size:0.85rem;margin-bottom:0.3rem}
+.empty-sub{font-size:0.75rem;opacity:0.6}
+
+/* Input area */
+.input-area{padding:1rem 1.5rem;border-top:1px solid var(--bg3);display:flex;align-items:center;gap:12px}
+.input-wrapper{flex:1;position:relative;display:flex;align-items:center}
+.input-wrapper textarea{width:100%;background:var(--bg3);border:1px solid var(--bg4);border-radius:var(--radius);padding:12px 48px 12px 16px;color:var(--fg);font-size:0.88rem;font-family:inherit;resize:none;height:138px;max-height:360px;outline:none;transition:border-color 0.2s;line-height:1.5}
+.input-wrapper textarea:focus{border-color:var(--accent)}
+.input-wrapper textarea::placeholder{color:var(--fg3)}
+.send-btn{position:absolute;right:8px;width:32px;height:32px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.15s;font-size:16px}
+.send-btn:hover{background:var(--accent2)}
+.send-btn:disabled{opacity:0.3;cursor:default}
+
+/* Voice indicator */
+.voice-status{display:flex;align-items:center;gap:8px;padding:6px 14px;border-radius:20px;font-size:0.75rem;transition:all 0.3s;white-space:nowrap;min-width:0}
+.voice-status.idle{background:var(--bg3);color:var(--fg3)}
+.voice-status.recording{background:var(--danger-dim);color:var(--recording);animation:pulse 1.2s infinite}
+.voice-status.processing{background:var(--accent-dim);color:var(--accent2)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.6}}
+.voice-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.voice-status.idle .voice-dot{background:var(--fg3)}
+.voice-status.recording .voice-dot{background:var(--recording)}
+.voice-status.processing .voice-dot{background:var(--accent2)}
+
+
+
+/* Responsive */
+@media(max-width:768px){
+.app{grid-template-columns:1fr}
+.sidebar{position:fixed;left:-280px;top:0;bottom:0;width:280px;z-index:100;transition:left 0.3s}
+.sidebar.open{left:0}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99}
+.sidebar.open~.sidebar-overlay{display:block}
+}
+</style>
+</head>
+<body>
+
+<!-- LOGIN PAGE -->
+<div class="login-page" id="loginPage">
+  <div class="login-card">
+    <div class="login-logo">speech to text</div>
+    <h1 class="login-title">按住 <span>Shift</span>，说话</h1>
+    <p class="login-sub">按住左 Shift 键录音，松开自动转文字<br>使用 Google AI 驱动的语音识别</p>
+    <button class="g-btn" id="googleLoginBtn" onclick="initGoogleLogin()">
+      <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+      使用 Google 登录
+    </button>
+    <p class="login-hint">安全登录，你的对话数据保存在本地浏览器中</p>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div class="app" id="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <span class="sidebar-brand">speech to text</span>
+      <button class="new-chat-btn" onclick="newChat()" title="新对话">+</button>
+    </div>
+    <div class="chat-list" id="chatList"></div>
+    <div style="padding:0.5rem 0.8rem">
+      <button class="clear-all-btn" onclick="clearAllChats()">🗑 清空所有记录</button>
+    </div>
+    <div class="sidebar-footer">
+      <img class="user-avatar" id="userAvatar" src="" alt="">
+      <span class="user-name" id="userName"></span>
+      <button class="logout-btn" onclick="logout()">退出</button>
+    </div>
+  </aside>
+
+  <main class="chat-area">
+    <div class="chat-header">
+      <span class="chat-header-title" id="chatHeaderTitle">新记录</span>
+      <span class="chat-header-count" id="chatHeaderCount"></span>
+    </div>
+    <div class="messages" id="messagesContainer"></div>
+    <div class="input-area">
+      <div class="voice-status idle" id="voiceStatus">
+        <div class="voice-dot"></div>
+        <span id="voiceLabel">左 Shift 录音</span>
+      </div>
+      <div class="input-wrapper">
+        <textarea id="chatInput" placeholder="输入消息，或按住左 Shift 录音..." rows="1"></textarea>
+        <button class="send-btn" id="sendBtn" onclick="sendMessage()" disabled>&#10148;</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+const GEMINI_API_KEY = 'AIzaSyC_MU-HVApJPEOrANKnXzashMkNtDnd9bs';
+const GOOGLE_CLIENT_ID = '307380593339-lkskv3k92uc2qamj0gebkkfkmfjce045.apps.googleusercontent.com';
+
+/* ===== STATE ===== */
+let currentUser = null;
+let chats = [];         // [{id, title, messages:[{content,time}], createdAt}]
+let activeChatId = null;
+let mediaRecorder = null;
+let audioChunks = [];
+let isRecording = false;
+let isProcessing = false;
+
+/* ===== AUTH ===== */
+function initGoogleLogin() {
+  google.accounts.id.initialize({
+    client_id: GOOGLE_CLIENT_ID,
+    callback: handleCredentialResponse,
+    auto_select: false
+  });
+  google.accounts.id.prompt();
+}
+
+function handleCredentialResponse(response) {
+  const payload = parseJwt(response.credential);
+  currentUser = { name: payload.name, email: payload.email, picture: payload.picture };
+  saveUser();
+  enterApp();
+}
+
+function parseJwt(token) {
+  const base64Url = token.split('.')[1];
+  const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+  return JSON.parse(decodeURIComponent(atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')));
+}
+
+function saveUser() { localStorage.setItem('vc_user', JSON.stringify(currentUser)); }
+function loadUser() {
+  const u = localStorage.getItem('vc_user');
+  if (u) { currentUser = JSON.parse(u); return true; }
+  return false;
+}
+
+function logout() {
+  localStorage.removeItem('vc_user');
+  currentUser = null;
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('loginPage').style.display = 'flex';
+}
+
+function enterApp() {
+  document.getElementById('loginPage').style.display = 'none';
+  document.getElementById('app').style.display = 'grid';
+  document.getElementById('userAvatar').src = currentUser.picture || '';
+  document.getElementById('userName').textContent = currentUser.name || currentUser.email;
+  loadChats();
+  renderChatList();
+  if (chats.length === 0) newChat();
+  else selectChat(chats[0].id);
+}
+
+/* ===== CHAT STORAGE ===== */
+const MAX_CHATS = 100;
+function saveChats() {
+  // 软上限：超过100条时删除最早的
+  while (chats.length > MAX_CHATS) chats.pop();
+  localStorage.setItem('vc_chats_' + currentUser.email, JSON.stringify(chats));
+}
+function loadChats() {
+  const c = localStorage.getItem('vc_chats_' + currentUser.email);
+  chats = c ? JSON.parse(c) : [];
+}
+
+/* ===== CHAT MANAGEMENT ===== */
+function newChat() {
+  const chat = { id: Date.now().toString(), title: '新记录', messages: [], createdAt: new Date().toISOString() };
+  chats.unshift(chat);
+  saveChats();
+  renderChatList();
+  selectChat(chat.id);
+}
+
+function selectChat(id) {
+  activeChatId = id;
+  renderChatList();
+  renderMessages();
+  const chat = chats.find(c => c.id === id);
+  document.getElementById('chatHeaderTitle').textContent = chat ? chat.title : '新记录';
+  updateHeaderCount();
+}
+
+function deleteChat(id, e) {
+  e.stopPropagation();
+  chats = chats.filter(c => c.id !== id);
+  saveChats();
+  if (activeChatId === id) {
+    if (chats.length > 0) selectChat(chats[0].id);
+    else newChat();
+  } else {
+    renderChatList();
+  }
+}
+
+let clearConfirmPending = false;
+function clearAllChats() {
+  const btn = document.querySelector('.clear-all-btn');
+  if (!clearConfirmPending) {
+    clearConfirmPending = true;
+    btn.textContent = '⚠ 确认清空？再点一次';
+    btn.style.borderColor = 'var(--danger)';
+    btn.style.color = 'var(--danger)';
+    btn.style.background = 'var(--danger-dim)';
+    setTimeout(() => {
+      if (clearConfirmPending) resetClearBtn();
+    }, 3000);
+    return;
+  }
+  chats = [];
+  saveChats();
+  resetClearBtn();
+  newChat();
+}
+
+function resetClearBtn() {
+  clearConfirmPending = false;
+  const btn = document.querySelector('.clear-all-btn');
+  if (btn) {
+    btn.textContent = '🗑 清空所有记录';
+    btn.style.borderColor = '';
+    btn.style.color = '';
+    btn.style.background = '';
+  }
+}
+
+function renderChatList() {
+  const list = document.getElementById('chatList');
+  list.innerHTML = chats.map(c => `
+    <div class="chat-item ${c.id === activeChatId ? 'active' : ''}" onclick="selectChat('${c.id}')">
+      <div class="chat-item-dot"></div>
+      <div class="chat-item-text">${escHtml(c.title)}</div>
+      <button class="chat-delete" onclick="deleteChat('${c.id}', event)" title="删除">&#x2715;</button>
+    </div>
+  `).join('');
+}
+
+function renderMessages() {
+  const chat = chats.find(c => c.id === activeChatId);
+  const container = document.getElementById('messagesContainer');
+  if (!chat || chat.messages.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">&#127908;</div>
+        <div class="empty-text">按住左 Shift 键开始录音</div>
+        <div class="empty-sub">松开后自动转为文字</div>
+      </div>`;
+    return;
+  }
+  container.innerHTML = chat.messages.map((m, i) => `
+    <div class="transcript-item">
+      <span class="transcript-time">${formatTime(m.time)}</span>
+      <button class="transcript-copy" onclick="copyMessage(${i})" title="复制">&#x2398;</button>
+      <span class="transcript-text">${escHtml(m.content)}</span>
+      <button class="transcript-delete" onclick="deleteMessage(${i})" title="删除">&#x2715;</button>
+    </div>
+  `).join('');
+  container.scrollTop = container.scrollHeight;
+  updateHeaderCount();
+}
+
+function addMessage(content) {
+  const chat = chats.find(c => c.id === activeChatId);
+  if (!chat) return;
+  chat.messages.push({ content, time: new Date().toISOString() });
+  if (chat.messages.length === 1) {
+    chat.title = content.slice(0, 30) + (content.length > 30 ? '...' : '');
+    document.getElementById('chatHeaderTitle').textContent = chat.title;
+    renderChatList();
+  }
+  saveChats();
+  renderMessages();
+}
+
+async function copyMessage(index) {
+  const chat = chats.find(c => c.id === activeChatId);
+  if (!chat || !chat.messages[index]) return;
+  try {
+    await navigator.clipboard.writeText(chat.messages[index].content);
+    const btns = document.querySelectorAll('.transcript-copy');
+    if (btns[index]) {
+      btns[index].innerHTML = '&#x2713;';
+      btns[index].style.color = 'var(--success)';
+      setTimeout(() => { btns[index].innerHTML = '&#x2398;'; btns[index].style.color = ''; }, 1000);
+    }
+  } catch (e) { console.error('Copy failed:', e); }
+}
+
+function deleteMessage(index) {
+  const chat = chats.find(c => c.id === activeChatId);
+  if (!chat) return;
+  chat.messages.splice(index, 1);
+  saveChats();
+  renderMessages();
+  renderChatList();
+}
+
+function updateHeaderCount() {
+  const chat = chats.find(c => c.id === activeChatId);
+  const count = chat ? chat.messages.length : 0;
+  document.getElementById('chatHeaderCount').textContent = count > 0 ? `${count} 条记录` : '';
+}
+
+/* ===== GEMINI API (with retry) ===== */
+async function geminiRequest(body, maxRetries = 3) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (res.status === 429 && attempt < maxRetries) {
+      const wait = (attempt + 1) * 3;  // 3s, 6s, 9s
+      console.warn(`429 限流，${wait}秒后重试 (${attempt + 1}/${maxRetries})...`);
+      await new Promise(r => setTimeout(r, wait * 1000));
+      continue;
+    }
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw { status: res.status, message: errData?.error?.message || `HTTP ${res.status}` };
+    }
+    return await res.json();
+  }
+}
+
+
+
+/* ===== SPEECH TO TEXT (Gemini) ===== */
+async function transcribeAudio(audioBlob) {
+  setVoiceStatus('processing', '转换中...');
+  try {
+    const base64 = await blobToBase64(audioBlob);
+    const audioData = base64.split(',')[1];
+
+    const data = await geminiRequest({
+      contents: [{
+        parts: [
+          { inlineData: { mimeType: audioBlob.type || 'audio/webm', data: audioData } },
+          { text: 'Transcribe this audio to text. Output ONLY the transcribed text in its original language (e.g., Korean, Chinese, English, Japanese, etc.). Do not translate. Do not add any extra explanation. If there is no speech, reply with "(no speech)".' }
+        ]
+      }],
+      generationConfig: { temperature: 0.1, maxOutputTokens: 1024 }
+    });
+
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+    setVoiceStatus('idle', '左 Shift 录音');
+
+    if (text && !text.includes('(no speech)') && text !== '（无语音内容）') {
+      const input = document.getElementById('chatInput');
+      const existing = input.value.trim();
+      input.value = existing ? existing + ' ' + text : text;
+      input.style.height = '46px';
+      input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+      document.getElementById('sendBtn').disabled = false;
+    } else {
+      setVoiceStatus('idle', '未检测到语音');
+      setTimeout(() => setVoiceStatus('idle', '左 Shift 录音'), 2000);
+    }
+  } catch (err) {
+    console.error('Transcription error:', err);
+    setVoiceStatus('idle', `API错误: ${err.message || err}`);
+    setTimeout(() => setVoiceStatus('idle', '左 Shift 录音'), 8000);
+  }
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+/* ===== RECORDING ===== */
+async function startRecording() {
+  if (isRecording || isProcessing) return;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioChunks = [];
+    mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+    mediaRecorder.onstop = () => {
+      stream.getTracks().forEach(t => t.stop());
+      if (audioChunks.length > 0) {
+        const blob = new Blob(audioChunks, { type: 'audio/webm' });
+        isProcessing = true;
+        transcribeAudio(blob).finally(() => { isProcessing = false; });
+      }
+    };
+    mediaRecorder.start();
+    isRecording = true;
+    setVoiceStatus('recording', '录音中...');
+  } catch (err) {
+    console.error('Mic error:', err);
+    setVoiceStatus('idle', '麦克风权限被拒绝');
+    setTimeout(() => setVoiceStatus('idle', '左 Shift 录音'), 2000);
+  }
+}
+
+function stopRecording() {
+  if (!isRecording || !mediaRecorder) return;
+  isRecording = false;
+  mediaRecorder.stop();
+}
+
+/* ===== KEYBOARD HANDLING ===== */
+document.addEventListener('keydown', e => {
+  if (e.key === 'Shift' && e.location === 1 && !e.repeat) {
+    e.preventDefault();
+    document.getElementById('chatInput').focus();
+    startRecording();
+  }
+});
+document.addEventListener('keyup', e => {
+  if (e.key === 'Shift' && e.location === 1) {
+    e.preventDefault();
+    stopRecording();
+  }
+});
+
+/* ===== SEND MESSAGE ===== */
+function sendMessage() {
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  document.getElementById('sendBtn').disabled = true;
+  addMessage(text);
+}
+
+/* ===== INPUT HANDLING ===== */
+const chatInput = document.getElementById('chatInput');
+chatInput.addEventListener('input', function() {
+  this.style.height = '138px';
+  this.style.height = Math.min(this.scrollHeight, 360) + 'px';
+  document.getElementById('sendBtn').disabled = !this.value.trim();
+});
+chatInput.addEventListener('keydown', e => {
+  // no auto-submit on Enter; Enter = newline
+});
+
+/* ===== HELPERS ===== */
+function setVoiceStatus(state, label) {
+  const el = document.getElementById('voiceStatus');
+  el.className = 'voice-status ' + state;
+  document.getElementById('voiceLabel').textContent = label;
+}
+
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function formatTime(iso) {
+  const d = new Date(iso);
+  return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+}
+
+/* ===== INIT ===== */
+window.addEventListener('load', () => {
+  if (loadUser()) enterApp();
+  // Also set up Google One Tap
+  if (typeof google !== 'undefined' && google.accounts) {
+    google.accounts.id.initialize({
+      client_id: GOOGLE_CLIENT_ID,
+      callback: handleCredentialResponse,
+      auto_select: true
+    });
+  }
+});
+</script>
+</body>
+</html>
